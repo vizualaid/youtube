@@ -2,8 +2,21 @@
 import dotenv from 'dotenv';
 import connectDB from './db/index.js';
 dotenv.config({ path: './.env' });
-connectDB();
-
+import {app} from './app.js';
+connectDB()
+.then(() => {
+    app.listen(process.env.PORT, () => {
+    console.log(`Server started on port ${process.env.PORT}`); 
+    })
+    app.on("error", (error) => {
+        console.error('Error connecting to the database:', error);
+        throw error;
+    }) 
+})
+.catch((error) => {
+    console.error('Error connecting to the database:', error);
+    process.exit(1);
+});
 // import mongoose from 'mongoose';
 // import express from 'express';
 // import app from './app.js';
