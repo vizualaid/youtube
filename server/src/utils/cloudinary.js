@@ -24,15 +24,20 @@ const uploadOnCloudinary = async (localfilePath) => {
         });
         // After successful upload, delete the local file
         console.log('File uploaded to Cloudinary:', result.secure_url);
+        // Delete the local file
+        if (localfilePath) {
+            fs.unlinkSync(localfilePath);
+        }
         return result;
-        // // Delete the local file
-        // fs.unlinkSync(localfilePath);
+
 
         
     } catch (error) {
         console.error('Error uploading file to Cloudinary:', error);
         // Delete the local file
-        fs.unlinkSync(localfilePath);
+        if (localfilePath) {
+            fs.unlinkSync(localfilePath);
+        }
         return null;
 
     }
