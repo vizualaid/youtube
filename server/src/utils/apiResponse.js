@@ -1,5 +1,5 @@
 class ApiResponse {
-    constructor(message="Success", statusCode, data=null
+    constructor(message="Success", statusCode, data=null, errors=null
         ) {
 
         this.statusCode = statusCode;

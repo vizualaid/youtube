@@ -22,14 +22,14 @@ export const registerUser = asyncHandler(async (req, res, next) => {
     {
         throw new ApiError('All fields are required', 400)
     }
-    const existingUser = User.findOne({ $or: [ { email }, { username } ] })
+    const existingUser = await User.findOne({ $or: [ { email }, { username } ] })
     if (existingUser) {
         throw new ApiError('User with given email or username already exists', 400);
     }
     console.log(req.files)
     const avatarLocalPath = req.files?.avatar[0]?.path; // local path of the uploaded file
     const coverImageLocalPath = req.files?.coverImage[0]?.path; // local path of the uploaded file
-    if(avatarLocalPath){
+    if(!avatarLocalPath){
         throw new ApiError('Avatar is required', 400);
     }
 
@@ -42,9 +42,7 @@ export const registerUser = asyncHandler(async (req, res, next) => {
     // create user object and save to db
     const user = await User.create({   
         fullName,
-        avatar: {
-            url: avatar.secure_url
-        },
+        avatar: avatar.secure_url,
         coverImage: coverImage?.url || null,
         email,  
         username: username.toLowerCase(),
@@ -57,8 +55,8 @@ export const registerUser = asyncHandler(async (req, res, next) => {
         throw new ApiError('Error in creating user', 500);
     }
     return res.status(201).json(
-        new ApiResponse(res, 200, true, 'User registered successfully', createdUser));
-
+        new ApiResponse('User registered successfully', 201, createdUser)
+    );
 // For demonstration, we'll just return a success message
 //     res.status(200).json({
 //     success: true,
