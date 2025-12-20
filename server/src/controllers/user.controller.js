@@ -3,12 +3,36 @@ import {ApiError} from "../utils/apiError.js";
 import {User} from "../models/user.model.js";
 import uploadOnCloudinary from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/apiResponse.js";
+
+const generateAccessAndRefreshToken = async (id) => {
+    try {
+        const user = await User.findById(id);
+        if (!user) {
+            throw new ApiError('User not found', 404);
+        }
+        
+        const accessToken = user.generateAccessToken();
+        const refreshToken = user.generateRefreshToken();
+        // save refresh token in db
+        try {
+        user.refreshToken = refreshToken;
+        await user.save({ validateBeforeSave: false });
+        } catch (err) {
+        throw new ApiError("Failed saving refreshToken", 500);
+        }
+
+
+        return {accessToken, refreshToken};
+    } catch (error) {
+        throw new ApiError('Error in generating tokens', 500);        
+    }
+}
+
 export const registerUser = asyncHandler(async (req, res, next) => {
     // Your registration logic here\
     // actual steps to register a user 
     // take the input from req.body (client se aaya hua data - postmen ya frontend)
     const { fullName, email, username, password } = req.body
-    console.log(fullName, email, username, password);
     // validate the input
     //  - if input is non empty or in valid format
     //  - check if user already exists, by username or email
@@ -26,7 +50,7 @@ export const registerUser = asyncHandler(async (req, res, next) => {
     if (existingUser) {
         throw new ApiError('User with given email or username already exists', 400);
     }
-    console.log(req.files)
+    // console.log(req.files)
     const avatarLocalPath = req.files?.avatar[0]?.path; // local path of the uploaded file
     // const coverImageLocalPath = req.files?.coverImage[0]?.path; // local path of the uploaded file
     let coverImageLocalPath = null;
@@ -67,4 +91,64 @@ export const registerUser = asyncHandler(async (req, res, next) => {
 //     success: true,
 //     message: "User registered successfully"
 //   });
+});
+
+export const loginUser = asyncHandler(async (req, res) => {
+    // Your login logic here
+    //req body -> data from client
+    // username or email validate password
+    // access tokren , refresh token
+    // return response
+    const { email, username, password } = req.body;
+
+    if (!password) throw new ApiError("Password required");
+
+    if (!email && !username)
+    throw new ApiError("Email or username required");
+
+    // find user by email or username
+    const user = await User.findOne({$or:[{email},{username:username.toLowerCase()}]});
+    if(!user){
+        throw new ApiError('Invalid credentials',404);
+    }
+    const isPasswordValid = await user.isPasswordValid(password);
+    if(!isPasswordValid){
+        throw new ApiError('Invalid credentials',404);
+    }
+    // generate tokens
+    const {accessToken, refreshToken} = await generateAccessAndRefreshToken(user._id);
+    const loggedInUser = await User.findById(user._id).select('-password -refreshToken');
+
+    //set cookies
+    const cookieOptions = {
+        httpOnly: true,
+        secure: true
+    }
+    return res.status(200).cookie('refreshToken', refreshToken, cookieOptions)
+    .cookie('accessToken', accessToken, cookieOptions)
+    .json(new ApiResponse('User logged in successfully',200,{
+        user: loggedInUser,
+        accessToken,
+        refreshToken
+    }));
+});
+
+export const logoutUser = asyncHandler(async (req, res) => {
+    // Your logout logic here
+    const userId = req.user._id;
+    const user = await User.findByIdAndUpdate(userId, {refreshToken: null}
+        , {new: true}
+    );
+
+    if (!user) {
+        throw new ApiError('User not found', 404);
+    }
+    const cookieOptions = {
+        httpOnly: true,
+        secure: true
+    };
+    return res.status(200).clearCookie('refreshToken', cookieOptions)
+    .clearCookie('accessToken', cookieOptions)
+    .json(new ApiResponse('User logged out successfully', 200));
+
 });
