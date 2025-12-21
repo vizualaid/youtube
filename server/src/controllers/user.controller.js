@@ -189,3 +189,110 @@ export const refreshAccessToken = asyncHandler(async (req,res) => {
     }
 
 })
+
+export const changePassword = asyncHandler(async (req, res) => {
+    //change password logic here
+    const {oldPassword, newPassword} = req.body;
+    const userId = req.user?._id;
+    const user = await User.findById(userId);
+    if(!user){
+        throw new ApiError('User not found', 404);
+    }
+    const isPasswordValid = await user.isPasswordValid(oldPassword);
+    if(!isPasswordValid){
+        throw new ApiError('Old password is incorrect', 400);
+    }
+    user.password = newPassword;
+    await user.save({validateBeforeSave: false});
+    return res
+    .status(200)
+    .json(new ApiResponse('Password changed successfully', 200));
+});
+
+export const getCurrentUser = asyncHandler(async (req, res) => {
+    // get current user logic here
+    const UserId = req.user?._id;
+    const user = await User.findById(UserId).select('-password -refreshToken');
+    if(!user){
+        throw new ApiError('User not found', 404);
+    }
+    return res
+    .status(200)
+    .json(new ApiResponse('Current user fetched successfully', 200, user));
+});
+
+export const updateAccountDetails  = asyncHandler(async (req, res) => {
+    // update account details logic here
+    // Helper function to capitalize the first letter of each word
+    const capitalizeFullName = (name) => {
+        return name
+            .split(" ")
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(" ");
+    };
+    const userId =  req.user?._id;
+    const {username, fullName, email} = req.body;
+    if([username, fullName, email].some(field => field?.trim()==="")){
+        throw new ApiError('All fields are required', 400);
+    }
+    const user = await User.findByIdAndUpdate(userId,
+        {$set: {username: username.toLowerCase(), fullName: capitalizeFullName(fullName), email: email.toLowerCase()}}, 
+        {new: true});
+    if(!user){
+        throw new ApiError('User not found', 404);
+    }
+    return res
+        .status(200)
+        .json(new ApiResponse('Account details updated successfully', 200, user));
+});
+
+export const updateUserAvatar = asyncHandler(async (req, res) => {
+    // update user avatar logic here
+    const userId = req.user?._id;
+    const avatarLocalPath = req.file?.path;
+    
+    if (!avatarLocalPath) {
+        throw new ApiError('No image file provided for avatar', 400);
+    }
+
+    const avatar = await uploadOnCloudinary(avatarLocalPath);
+    if (!avatar?.secure_url) {
+        throw new ApiError('Error in uploading avatar image', 500);
+    }
+    const user = await User.findByIdAndUpdate(
+        userId,
+        {$set: {avatar: avatar.secure_url}},
+        {new: true}
+    ).select('-password -refreshToken'); 
+    if (!user) {
+        throw new ApiError('User not found', 404);
+    }  
+    return res
+        .status(200)
+        .json(new ApiResponse('Avatar updated successfully', 200, user));
+});
+
+export const updateUserCoverImage = asyncHandler(async (req, res) => {
+    // update user cover image logic here
+    const userId = req.user?._id;
+    const coverImageLocalPath = req.file?.path;
+    if(!coverImageLocalPath){
+        throw new ApiError('No image file provided for cover image', 400);
+    }
+    // upload to cloudinary
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+    if (!coverImage?.secure_url) {
+        throw new ApiError('Error in uploading cover image', 500);
+    }
+    const user = await User.findByIdAndUpdate(
+        userId,
+        {$set: {coverImage: coverImage.secure_url}},
+        {new: true}
+    ).select('-password -refreshToken');
+    if (!user) {
+        throw new ApiError('User not found', 404);
+    }
+    return res
+        .status(200)
+        .json(new ApiResponse('Cover image updated successfully', 200, user));
+});
