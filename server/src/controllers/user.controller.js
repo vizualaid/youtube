@@ -4,6 +4,7 @@ import {User} from "../models/user.model.js";
 import uploadOnCloudinary from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
+import { extractPublicId } from 'cloudinary-build-url'
 
 const generateAccessAndRefreshToken = async (id) => {
     try {
@@ -84,14 +85,9 @@ export const registerUser = asyncHandler(async (req, res, next) => {
     if (!createdUser) {
         throw new ApiError('Error in creating user', 500);
     }
-    return res.status(201).json(
-        new ApiResponse('User registered successfully', 200, createdUser)
-    );
-// For demonstration, we'll just return a success message
-//     res.status(200).json({
-//     success: true,
-//     message: "User registered successfully"
-//   });
+    return res
+    .status(201)
+    .json(new ApiResponse('User registered successfully', 200, createdUser));
 });
 
 export const loginUser = asyncHandler(async (req, res) => {
@@ -254,7 +250,27 @@ export const updateUserAvatar = asyncHandler(async (req, res) => {
     if (!avatarLocalPath) {
         throw new ApiError('No image file provided for avatar', 400);
     }
-
+     // TODO Assingment : 
+     // delete previous avatar from cloudinary
+    const previousAvatarUrl = req.user?.avatar;
+    if (previousAvatarUrl) {
+       try {
+        // Extract public ID from the URL
+        const publicId = extractPublicId(previousAvatarUrl);
+        if (publicId) {
+            await cloudinary.uploader.destroy(publicId);
+        }
+        console.log("Previous avatar public ID:", publicId);
+        // const publicId2 = v2.utils.public_id(previousAvatarUrl);
+        // console.log("Previous avatar public ID:", publicId2);
+       } catch (error) {
+        console.error("Error deleting previous avatar:", error.message);
+       }
+    }
+    else {
+        console.log("No previous avatar to delete");
+    }
+    
     const avatar = await uploadOnCloudinary(avatarLocalPath);
     if (!avatar?.secure_url) {
         throw new ApiError('Error in uploading avatar image', 500);
@@ -266,7 +282,7 @@ export const updateUserAvatar = asyncHandler(async (req, res) => {
     ).select('-password -refreshToken'); 
     if (!user) {
         throw new ApiError('User not found', 404);
-    }  
+    }        
     return res
         .status(200)
         .json(new ApiResponse('Avatar updated successfully', 200, user));
