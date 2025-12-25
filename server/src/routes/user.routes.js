@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { registerUser, loginUser, logoutUser, refreshAccessToken,  changePassword, getCurrentUser, updateAccountDetails, updateUserAvatar, updateUserCoverImage} from "../controllers/user.controller.js";
+import { registerUser, loginUser, logoutUser, refreshAccessToken,  changePassword, getCurrentUser, updateAccountDetails, updateUserAvatar, updateUserCoverImage, getUserChannelProfile, getWatchHistory} from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -20,6 +20,9 @@ router.route("/changePassword").post(upload.none(), verifyJWT, changePassword);
 router.route("/updateAccountDetails").post(upload.none(), verifyJWT, updateAccountDetails);
 router.route("/updateAvatar").post(verifyJWT, upload.single("avatar"), updateUserAvatar);
 router.route("/updateCoverImage").post(verifyJWT, upload.single("coverImage"), updateUserCoverImage);
+router.route("/ch/:username").get(upload.none(), verifyJWT, getUserChannelProfile);
+router.route("/history").get(upload.none(), verifyJWT, getWatchHistory);
+
 export default router;
  
 // Example route using the user controller controller
