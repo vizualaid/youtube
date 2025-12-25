@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js"; 
 import {ApiError} from "../utils/apiError.js";
 import {User} from "../models/user.model.js";
-import uploadOnCloudinary from "../utils/cloudinary.js";
+import {uploadOnCloudinary, deleteFromCloudinary} from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
 import { extractPublicId } from 'cloudinary-build-url'
@@ -258,16 +258,19 @@ export const updateUserAvatar = asyncHandler(async (req, res) => {
         // Extract public ID from the URL
         const publicId = extractPublicId(previousAvatarUrl);
         if (publicId) {
-            await cloudinary.uploader.destroy(publicId);
+            console.log("Previous avatar public ID:", publicId);    
+            const result = await deleteFromCloudinary(publicId);
+
+            if (result?.result !== 'ok' && result?.result !== 'not found') {
+                console.log("Failed to delete previous avatar from Cloudinary");
+            } else {
+                console.log("Previous avatar deleted from Cloudinary");
+            }
         }
-        console.log("Previous avatar public ID:", publicId);
-        // const publicId2 = v2.utils.public_id(previousAvatarUrl);
-        // console.log("Previous avatar public ID:", publicId2);
        } catch (error) {
         console.error("Error deleting previous avatar:", error.message);
        }
-    }
-    else {
+    } else {
         console.log("No previous avatar to delete");
     }
     
@@ -294,6 +297,30 @@ export const updateUserCoverImage = asyncHandler(async (req, res) => {
     const coverImageLocalPath = req.file?.path;
     if(!coverImageLocalPath){
         throw new ApiError('No image file provided for cover image', 400);
+    }
+         // TODO Assingment : 
+     // delete previous avatar from cloudinary
+    const previousCoverUrl = req.user?.coverImage;
+    if (previousCoverUrl) {
+       try {
+        // Extract public ID from the URL
+        const publicId = extractPublicId(previousCoverUrl);
+        if (publicId) {
+            console.log("Previous cover image public ID:", publicId);    
+            const resultdel = await deleteFromCloudinary(publicId);
+                if(resultdel?.result !== 'ok' && resultdel?.result !== 'not found') {
+                    console.log("Failed to delete previous cover image from Cloudinary");
+                }
+                else {
+                    console.log("Previous cover image deleted from Cloudinary");
+                }
+        }       
+       } catch (error) {
+        console.error("Error deleting previous cover image:", error.message);
+       }
+    }
+    else {
+        console.log("No previous cover image to delete");
     }
     // upload to cloudinary
     const coverImage = await uploadOnCloudinary(coverImageLocalPath);
