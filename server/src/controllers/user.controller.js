@@ -5,6 +5,7 @@ import {uploadOnCloudinary, deleteFromCloudinary} from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
 import { extractPublicId } from 'cloudinary-build-url'
+import mongoose, { mongo } from "mongoose";
 
 const generateAccessAndRefreshToken = async (id) => {
     try {
@@ -405,4 +406,47 @@ export const getUserChannelProfile = asyncHandler(async (req, res) => {
     return res
     .status(200)
     .json(new ApiResponse('Channel profile fetched successfully', 200, channel[0]));
+});
+
+export const getWatchHistory = asyncHandler(async (req, res) => {
+    // get watched videos logic here
+    const userId = req.user?._id;
+    const user = await User.aggregate([
+        { $match: { _id: new mongoose.Types.ObjectId(req.user?._id) } },
+        { $lookup:
+            {
+                from: "Video",
+                localField: "watchHistory",
+                foreignField: "_id",
+                as: "watchHistory",
+                pipeline: [
+                    {
+                        $lookup:{
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: [
+                                {
+                                    $project:{
+                                        fullName: 1,
+                                        username: 1,
+                                        avatar: 1
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                   {
+                     $addFields:{
+                        owner: { $arrayElemAt: ["$owner", 0] }
+                    }
+                   }
+                ]
+            }
+        }
+    ])
+    return res
+    .status(200)
+    .json(new ApiResponse('Watch history fetched successfully', 200, user[0].watchHistory));
 });
