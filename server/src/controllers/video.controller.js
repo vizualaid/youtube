@@ -34,10 +34,14 @@ const getAllVideos = asyncHandler(async (req, res) => {
   }
 
   const skip = (Number(page) - 1) * Number(limit);
+  // skip = (1 (page) - 1) * 10 = 0 :: Skip 0, return 10 documents → Documents 1-10
+  // skip = (2 - 1) * 10 = 10 :: Skip 10, return 10 documents → Documents 11-20
+  // skip = (3 - 1) * 10 = 20 :: Skip 20, return 10 documents → Documents 21-30
   const sortOrder = sortType === "desc" ? -1 : 1;
 
   const [videos, totalVideos] = await Promise.all([
     Video.find(filters)
+      .populate('uploadedBy', 'username avatar')
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
       .limit(Number(limit)),
@@ -113,13 +117,105 @@ const publishAVideo = asyncHandler(async (req, res) => {
 
 const getVideoById = asyncHandler(async (req, res) => {
     const { videoId } = req.params
-    //TODO: get video by id
-    const video = await Video.findById(videoId)
-    if(!video){
+    
+    const video = await Video.aggregate([
+        { $match: { _id: new mongoose.Types.ObjectId(videoId) } },
+        {
+            $lookup: {
+                from: 'users',
+                localField: 'uploadedBy',
+                foreignField: '_id',
+                as: 'uploadedBy'
+            }
+        },
+        // { $unwind: '$uploadedBy' },
+        {
+            $lookup: {
+                from: 'likes',
+                localField: '_id',
+                foreignField: 'videoId',
+                as: 'likes'
+            }
+        },
+        {
+            $lookup: {
+                from: 'comments',
+                localField: '_id',
+                foreignField: 'videoId',
+                as: 'comments'
+            }
+        },
+        {
+            $lookup: {
+                from: 'users',
+                localField: 'comments.owner',
+                foreignField: '_id',
+                as: 'commentOwners'
+            }
+        },
+        {
+            $addFields: {
+                comments: {
+                    $map: {
+                        input: '$comments',
+                        as: 'comment',
+                        in: {
+                            _id: '$$comment._id',
+                            content: '$$comment.content',
+                            createdAt: '$$comment.createdAt',
+                            owner: {
+                                $arrayElemAt: [
+                                    {
+                                        $filter: {
+                                            input: '$commentOwners',
+                                            as: 'user',
+                                            cond: { $eq: ['$$user._id', '$$comment.owner'] }
+                                        }
+                                    },
+                                    0
+                                ]
+                            }
+                        }
+                    }
+                },
+                likesCount: { $size: '$likes' },
+                commentsCount: { $size: '$comments' }
+            }
+        },
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                videoFile: 1,
+                thumbnail: 1,
+                views: 1,
+                createdAt: 1,
+                'uploadedBy._id': 1,
+                'uploadedBy.username': 1,
+                'uploadedBy.avatar': 1,
+                likesCount: 1,
+                commentsCount: 1,
+                comments: {
+                    _id: 1,
+                    content: 1,
+                    createdAt: 1,
+                    'owner._id': 1,
+                    'owner.username': 1,
+                    'owner.avatar': 1
+                }
+            }
+        }
+    ]);
+
+    if(!video || video.length === 0){
         throw new ApiError('Video not found', 404)
     }
+    
+    // Increment view count
+    await Video.findByIdAndUpdate(videoId, { $inc: { views: 1 } });
+
     return res.status(200).json(
-        new ApiResponse(200, "Video fetched successfully", video)
+        new ApiResponse(200, "Video fetched successfully", video[0])
     );
 })
 

@@ -5,21 +5,22 @@ import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 
 const router = Router();
-router.use(verifyJWT);
 
-router.route("/")
-.get(getAllVideos)
-.post(upload.fields([
+// Public routes
+router.route("/").get(getAllVideos);
+router.route("/id/:videoId").get(getVideoById);
+
+// Protected routes
+router.route("/").post(verifyJWT, upload.fields([
     { name: 'video', maxCount: 1 },
-        { name: 'thumbnail', maxCount: 1 }
-    ]), publishAVideo);
+    { name: 'thumbnail', maxCount: 1 }
+]), publishAVideo);
 
 router.route("/id/:videoId")
-.get(getVideoById)
-.patch(upload.fields([
-            { name: 'thumbnail', maxCount: 1 }
-        ]), updateVideo)
-.delete(deleteVideo);
+.patch(verifyJWT, upload.fields([
+    { name: 'thumbnail', maxCount: 1 }
+]), updateVideo)
+.delete(verifyJWT, deleteVideo);
 
-router.route("/toggle-publish/:videoId").patch(togglePublishStatus);
+router.route("/toggle-publish/:videoId").patch(verifyJWT, togglePublishStatus);
 export default router;
