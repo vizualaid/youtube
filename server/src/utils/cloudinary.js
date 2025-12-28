@@ -4,6 +4,8 @@
 //server pe aa gayi h server se aklocal path doge mai use cloudinary pe upload kar dunga
 import {v2 as cloudinary} from 'cloudinary';
 import fs from 'fs'; //file system module in node by default 
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Configuration
 cloudinary.config({ 
@@ -11,7 +13,7 @@ cloudinary.config({
     api_key: process.env.CLOUDINARY_API_KEY, 
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
-
+console.log('Cloudinary configured with cloud name:', process.env.CLOUDINARY_CLOUD_NAME, 'and API key:', process.env.CLOUDINARY_API_KEY, 'and API secret:', process.env.CLOUDINARY_API_SECRET ? 'set' : 'not set');
 const uploadOnCloudinary = async (localfilePath) => {
     try {
         if(!localfilePath){
@@ -43,21 +45,21 @@ const uploadOnCloudinary = async (localfilePath) => {
     }
 }
 
-// // Optimize delivery by resizing and applying auto-format and auto-quality
-//     const optimizeUrl = cloudinary.url('shoes', {
-//         fetch_format: 'auto',
-//         quality: 'auto'
-//     });
-    
-//     console.log(optimizeUrl);
-    
-//     // Transform the image: auto-crop to square aspect_ratio
-//     const autoCropUrl = cloudinary.url('shoes', {
-//         crop: 'auto',
-//         gravity: 'auto',
-//         width: 500,
-//         height: 500,
-//     });
-    
-//     console.log(autoCropUrl);    
-export default uploadOnCloudinary;
+const deleteFromCloudinary = async (publicId) => {
+    try {
+        const result = await cloudinary.uploader.destroy(publicId, {
+            resource_type: 'image', // does not automatically detect the file type
+        });
+
+        if (result && result.result === 'ok') {
+            console.log('File deleted from Cloudinary:', result);
+        } else {
+            console.error('Unexpected result while deleting file from Cloudinary:', result);
+        }
+        return result;
+    } catch (error) {
+        console.error('Error deleting file from Cloudinary:', error);
+    }
+};
+ 
+export {uploadOnCloudinary, deleteFromCloudinary};

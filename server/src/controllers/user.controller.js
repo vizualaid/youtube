@@ -1,10 +1,11 @@
 import { asyncHandler } from "../utils/asyncHandler.js"; 
 import {ApiError} from "../utils/apiError.js";
 import {User} from "../models/user.model.js";
-import uploadOnCloudinary from "../utils/cloudinary.js";
+import {uploadOnCloudinary, deleteFromCloudinary} from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
 import { extractPublicId } from 'cloudinary-build-url'
+import mongoose, { mongo } from "mongoose";
 
 const generateAccessAndRefreshToken = async (id) => {
     try {
@@ -258,16 +259,19 @@ export const updateUserAvatar = asyncHandler(async (req, res) => {
         // Extract public ID from the URL
         const publicId = extractPublicId(previousAvatarUrl);
         if (publicId) {
-            await cloudinary.uploader.destroy(publicId);
+            console.log("Previous avatar public ID:", publicId);    
+            const result = await deleteFromCloudinary(publicId);
+
+            if (result?.result !== 'ok' && result?.result !== 'not found') {
+                console.log("Failed to delete previous avatar from Cloudinary");
+            } else {
+                console.log("Previous avatar deleted from Cloudinary");
+            }
         }
-        console.log("Previous avatar public ID:", publicId);
-        // const publicId2 = v2.utils.public_id(previousAvatarUrl);
-        // console.log("Previous avatar public ID:", publicId2);
        } catch (error) {
         console.error("Error deleting previous avatar:", error.message);
        }
-    }
-    else {
+    } else {
         console.log("No previous avatar to delete");
     }
     
@@ -295,6 +299,30 @@ export const updateUserCoverImage = asyncHandler(async (req, res) => {
     if(!coverImageLocalPath){
         throw new ApiError('No image file provided for cover image', 400);
     }
+         // TODO Assingment : 
+     // delete previous avatar from cloudinary
+    const previousCoverUrl = req.user?.coverImage;
+    if (previousCoverUrl) {
+       try {
+        // Extract public ID from the URL
+        const publicId = extractPublicId(previousCoverUrl);
+        if (publicId) {
+            console.log("Previous cover image public ID:", publicId);    
+            const resultdel = await deleteFromCloudinary(publicId);
+                if(resultdel?.result !== 'ok' && resultdel?.result !== 'not found') {
+                    console.log("Failed to delete previous cover image from Cloudinary");
+                }
+                else {
+                    console.log("Previous cover image deleted from Cloudinary");
+                }
+        }       
+       } catch (error) {
+        console.error("Error deleting previous cover image:", error.message);
+       }
+    }
+    else {
+        console.log("No previous cover image to delete");
+    }
     // upload to cloudinary
     const coverImage = await uploadOnCloudinary(coverImageLocalPath);
     if (!coverImage?.secure_url) {
@@ -311,4 +339,114 @@ export const updateUserCoverImage = asyncHandler(async (req, res) => {
     return res
         .status(200)
         .json(new ApiResponse('Cover image updated successfully', 200, user));
+});
+
+
+export const getUserChannelProfile = asyncHandler(async (req, res) => {
+    // get user channel profile logic here
+    // username from URL so using params
+    const { username } = req.params;
+    if (!username?.trim()) {
+        throw new ApiError('Username is required', 400);
+    }
+    const channel = await User.aggregate([
+        { $match: { username: username.toLowerCase() } },
+        { $lookup: 
+            { 
+                from: "subscription",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers"
+            } 
+        },
+        { $lookup: 
+            { 
+                from: "subscription",
+                localField: "_id",
+                foreignField: "subscribers",
+                as: "subscribedTo"
+            } 
+        },  
+        { $addFields: 
+            { 
+                subscribersCount: { $size: "$subscribers" },    
+                subscribedToCount: { $size: "$subscribedTo" },
+                isSubscribed: { 
+                    $cond: {
+                        if: {$in: [req.user?._id, "$subscribers.subscriber"]
+                        },
+                        then: true,
+                        else : false
+                    }
+                }
+            }
+        },
+        { $project: 
+            { 
+                fullName: 1,
+                username: 1,
+                avatar: 1,
+                coverImage: 1,
+                subscribersCount: 1,
+                subscribedToCount: 1,
+                isSubscribed: 1
+            }
+        }  
+    ])
+
+    const user = await User.findOne({ username: username.toLowerCase() }).select('-password -refreshToken');
+    if (!user) {
+        throw new ApiError('User not found', 404);
+    }
+
+    if (channel.length === 0) {
+    throw new ApiError('Channel not found', 404);
+    }
+    
+    return res
+    .status(200)
+    .json(new ApiResponse('Channel profile fetched successfully', 200, channel[0]));
+});
+
+export const getWatchHistory = asyncHandler(async (req, res) => {
+    // get watched videos logic here
+    const userId = req.user?._id;
+    const user = await User.aggregate([
+        { $match: { _id: new mongoose.Types.ObjectId(req.user?._id) } },
+        { $lookup:
+            {
+                from: "Video",
+                localField: "watchHistory",
+                foreignField: "_id",
+                as: "watchHistory",
+                pipeline: [
+                    {
+                        $lookup:{
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: [
+                                {
+                                    $project:{
+                                        fullName: 1,
+                                        username: 1,
+                                        avatar: 1
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                   {
+                     $addFields:{
+                        owner: { $arrayElemAt: ["$owner", 0] }
+                    }
+                   }
+                ]
+            }
+        }
+    ])
+    return res
+    .status(200)
+    .json(new ApiResponse('Watch history fetched successfully', 200, user[0].watchHistory));
 });
